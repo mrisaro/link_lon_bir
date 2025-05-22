@@ -55,7 +55,7 @@ def load_frequency_data(filepath):
 
     return df
 
-def plot_channel_8_analysis(df, channel_name='FXE_A8', f0=21.4e6, d_f=1):
+def plot_channel_8_analysis(df, channel_name='FXE_A8', f0=21.4e6, d_f=1, axs=None):
     """
     Creates a 4-panel plot:
     - Top-left: Last 12 hours of frequency data
@@ -68,6 +68,7 @@ def plot_channel_8_analysis(df, channel_name='FXE_A8', f0=21.4e6, d_f=1):
     channel_name (str): Name of the channel to analyze (default 'FXE_A8')
     f0 (float): Center frequency for zoom/histogram (default 21.4 MHz)
     d_f (float): Frequency span for histogram and Y-axis limits
+    axs (list of Axes): Optional list of matplotlib Axes to reuse in persistent windows.
     """
     if channel_name not in df.columns:
         raise ValueError(f"Channel '{channel_name}' not found in DataFrame.")
@@ -77,57 +78,57 @@ def plot_channel_8_analysis(df, channel_name='FXE_A8', f0=21.4e6, d_f=1):
     df_12h = df[df.index >= t12h]
     df_1000 = df.tail(1000)
 
-    # Prepare figure
-    fig, axs = plt.subplots(2, 2, figsize=(12, 6))
-    axs = axs.flatten()
+    # Create or reuse figure
+    if axs is None:
+        fig, axs = plt.subplots(2, 2, figsize=(12, 6))
+        axs = axs.flatten()
 
-    # --- Plot 1: Last 12 hours ---
-    axs[0].plot(df_12h.index, df_12h[channel_name], '.', label=channel_name, color='C0')
+    # Clear each axis
+    for ax in axs:
+        ax.clear()
+
+    # Top-left: Last 12h
+    axs[0].plot(df_12h.index, df_12h[channel_name], '.', color='C0')
     axs[0].set_title(f"{channel_name} - Last 12 Hours")
+    axs[0].set_ylim(f0 - d_f, f0 + d_f)
     axs[0].set_xlabel("Time")
     axs[0].set_ylabel("Frequency [Hz]")
-    axs[0].set_ylim(f0 - d_f, f0 + d_f)
     axs[0].grid(True)
 
-    # --- Plot 2: Histogram (horizontal) over last 12h ±d_f ---
+    # Top-right: Histogram (±d_f)
     freqs_12h = df_12h[channel_name].dropna()
     freqs_filtered = freqs_12h[(freqs_12h >= f0 - d_f) & (freqs_12h <= f0 + d_f)]
     axs[1].hist(freqs_filtered, bins=100, range=(f0 - d_f, f0 + d_f),
                 color='C0', orientation='horizontal')
     axs[1].set_title("Histogram (Last 12h)")
-    axs[1].set_ylabel("Frequency [Hz]")
     axs[1].set_xlabel("Count")
+    axs[1].set_ylabel("Frequency [Hz]")
     axs[1].set_ylim(f0 - d_f, f0 + d_f)
     axs[1].grid(True)
 
-    # --- Plot 3: Last 1000 points ---
-    axs[2].plot(df_1000.index, df_1000[channel_name], '.', color='C1')
+    # Bottom-left: Last 1000 points
+    axs[2].plot(df_1000.index, df_1000[channel_name], '.', color='C0')
     axs[2].set_title("Last 1000 Points")
+    axs[2].set_ylim(f0 - d_f, f0 + d_f)
     axs[2].set_xlabel("Time")
     axs[2].set_ylabel("Frequency [Hz]")
-    axs[2].set_ylim(f0 - d_f, f0 + d_f)
     axs[2].grid(True)
 
-    # --- Plot 4: Allan deviation for both windows ---
-    rate = 1  # 1 Hz sampling
-
-    # Last 12h
-    y_12h = freqs_12h.values
-    if len(y_12h) > 10:
-        taus12, adev12, _, _ = allantools.mdev(y_12h, rate=rate, data_type='freq')
+    # Bottom-right: Allan deviation
+    rate = 1
+    if len(freqs_12h) > 10:
+        taus12, adev12, _, _ = allantools.oadev(freqs_12h.values, rate=rate, data_type='freq')
         axs[3].loglog(taus12, adev12, '-o', label='12h')
-
-    # Last 1000
     y_1000 = df_1000[channel_name].dropna().values
     if len(y_1000) > 10:
-        taus1000, adev1000, _, _ = allantools.mdev(y_1000, rate=rate, data_type='freq')
-        axs[3].loglog(taus1000, adev1000, '-o', label='Last 1000 pts')
+        taus1000, adev1000, _, _ = allantools.oadev(y_1000, rate=rate, data_type='freq')
+        axs[3].loglog(taus1000, adev1000, '-o', label='1000 pts')
 
     axs[3].set_title("Allan Deviation")
-    axs[3].set_xlabel("Tau (s)")
-    axs[3].set_ylabel('MDVEV (Hz)')
-    axs[3].grid(True, which="both", ls="--")
+    axs[3].set_xlabel("Tau [s]")
+    axs[3].set_ylabel("σ_y(τ)")
     axs[3].legend()
+    axs[3].grid(True, which='both', ls='--')
 
     plt.tight_layout()
-    plt.show()
+    plt.draw()
