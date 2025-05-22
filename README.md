@@ -21,6 +21,7 @@ The aim is to collect and process frequency data from **K+K frequency counters**
 ├── main.py             # Main script for running live or static analysis
 ├── data/               # Folder containing raw .txt frequency log files
 └── README.md           # This file
+```
 
 ## ✅ Features Implemented
 
